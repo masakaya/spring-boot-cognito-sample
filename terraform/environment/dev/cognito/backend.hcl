@@ -1,8 +1,8 @@
 # Usage:
-#   terraform init -backend-config=backend.hcl
-# Replace <ACCOUNT_ID> with the target AWS account ID (matches the bucket created by terraform/bootstrap).
+#   terraform init \
+#     -backend-config=../../../backends/dev.hcl \
+#     -backend-config=backend.hcl
+# Common settings (bucket / region / use_lockfile) live in
+# terraform/backends/dev.hcl.
 
-bucket         = "dev-sbcs-tfstate-<ACCOUNT_ID>"
-dynamodb_table = "dev-sbcs-tfstate-lock"
-region         = "ap-northeast-1"
-key            = "environment/dev/cognito/terraform.tfstate"
+key = "environment/dev/cognito/terraform.tfstate"

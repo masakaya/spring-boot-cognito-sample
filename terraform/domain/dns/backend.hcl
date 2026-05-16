@@ -1,9 +1,8 @@
 # Usage:
-#   terraform init -backend-config=backend.hcl
-# Replace <ACCOUNT_ID> with the target AWS account ID.
-# The 'shared' bucket is created by bootstrap with env=shared.
+#   terraform init \
+#     -backend-config=../../backends/shared.hcl \
+#     -backend-config=backend.hcl
+# Common settings (bucket / region / use_lockfile) live in
+# terraform/backends/shared.hcl.
 
-bucket         = "shared-sbcs-tfstate-<ACCOUNT_ID>"
-dynamodb_table = "shared-sbcs-tfstate-lock"
-region         = "ap-northeast-1"
-key            = "domain/dns/terraform.tfstate"
+key = "domain/dns/terraform.tfstate"

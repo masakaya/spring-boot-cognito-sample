@@ -1,6 +1,8 @@
 # Terraform Bootstrap (tfstate Backend)
 
-このスタックは、ほかの Terraform スタックが利用する **共有 state バックエンド** (S3 + DynamoDB) を AWS 上に作成する。`dev` / `stg` / `prd` の環境別および、環境横断のリソース (例: `domain/dns`, `domain/acm`) 用の `shared` を、同じコードを使い分けて作成する。
+このスタックは、ほかの Terraform スタックが利用する **共有 state バックエンド** (S3) を AWS 上に作成する。`dev` / `stg` / `prd` の環境別および、環境横断のリソース (例: `domain/dns`, `domain/acm`) 用の `shared` を、同じコードを使い分けて作成する。
+
+state lock は Terraform 1.10 で導入され 1.11 で GA となった **S3 native locking** (`use_lockfile = true`) を利用するため、DynamoDB は作成しない。
 
 ## 作成リソース
 
@@ -8,8 +10,7 @@
 
 | リソース | 役割 |
 | --- | --- |
-| S3 バケット `<env>-<system>-tfstate-<account-id>` | tfstate の保管。バージョニング・SSE-S3・Public Access Block・HTTPS/TLS 強制を有効化 |
-| DynamoDB テーブル `<env>-<system>-tfstate-lock` | state の排他ロック (`LockID` ハッシュキー、PAY_PER_REQUEST、PITR、削除保護) |
+| S3 バケット `<env>-<system>-tfstate-<account-id>` | tfstate および lockfile (`*.tflock`) の保管。バージョニング・SSE-S3・Public Access Block・HTTPS/TLS 強制を有効化 |
 
 ## 前提
 
@@ -17,7 +18,6 @@
 - AWS Provider `~> 6.0`
 - 利用モジュール:
   - [`terraform-aws-modules/s3-bucket/aws`](https://registry.terraform.io/modules/terraform-aws-modules/s3-bucket/aws) `~> 5.13`
-  - [`terraform-aws-modules/dynamodb-table/aws`](https://registry.terraform.io/modules/terraform-aws-modules/dynamodb-table/aws) `~> 5.5`
 
 ## ファイル構成
 
@@ -75,17 +75,33 @@ terraform output -state=state/dev.tfstate backend_config_snippet
 
 ## ほかのスタックでの利用例
 
+各スタックの `backend.tf` は最小定義のみ:
+
 ```hcl
 terraform {
   backend "s3" {
-    bucket         = "dev-sbcs-tfstate-123456789012"
-    key            = "app/terraform.tfstate"
-    region         = "ap-northeast-1"
-    dynamodb_table = "dev-sbcs-tfstate-lock"
-    encrypt        = true
+    encrypt = true
   }
 }
 ```
+
+残りの設定は `-backend-config` で 2 段に分けて渡す。共通部分 (`bucket` / `region` / `use_lockfile`) はスコープごとに `terraform/backends/<scope>.hcl` に集約してあり、スタック固有の `key` のみが各スタックの `backend.hcl` に入る:
+
+```bash
+# domain/* (env=shared スコープ)
+cd terraform/domain/acm
+terraform init \
+  -backend-config=../../backends/shared.hcl \
+  -backend-config=backend.hcl
+
+# environment/dev/* (env=dev スコープ)
+cd terraform/environment/dev/cognito
+terraform init \
+  -backend-config=../../../backends/dev.hcl \
+  -backend-config=backend.hcl
+```
+
+複数指定された `-backend-config` は Terraform 内部でマージされる。`<ACCOUNT_ID>` プレースホルダは利用時に置換すること。
 
 ## なぜ bootstrap の state はローカル管理なのか
 
@@ -101,5 +117,6 @@ terraform init -migrate-state
 
 ## 注意
 
-- `force_destroy = false` および `deletion_protection_enabled = true` を設定しているため、`terraform destroy` ではバケット/テーブルは削除されない。意図的に削除する場合は引数を一時的に変更してから実施する。
+- `force_destroy = false` を設定しているため、中身が空でない限り `terraform destroy` ではバケットは削除されない。意図的に削除する場合は引数を一時的に変更してから実施する。
 - `.terraform.lock.hcl` は Git にコミットすること (依存プロバイダーバージョンの再現性確保のため)。
+- 既に DynamoDB ロックで `terraform init` 済みのスタックがある場合は、backend 設定変更後に `terraform init -reconfigure` (state は移行不要) を実行してロック方式を切り替えること。

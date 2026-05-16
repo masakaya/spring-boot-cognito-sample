@@ -8,26 +8,16 @@ output "state_bucket_arn" {
   value       = module.state_bucket.s3_bucket_arn
 }
 
-output "state_lock_table_name" {
-  description = "Name of the DynamoDB table used for Terraform state locking."
-  value       = module.state_lock.dynamodb_table_id
-}
-
-output "state_lock_table_arn" {
-  description = "ARN of the DynamoDB table used for Terraform state locking."
-  value       = module.state_lock.dynamodb_table_arn
-}
-
 output "backend_config_snippet" {
-  description = "Backend configuration snippet to copy into other Terraform stacks."
+  description = "Backend configuration snippet to copy into other Terraform stacks. Uses S3 native state locking (Terraform >= 1.11)."
   value       = <<-EOT
     terraform {
       backend "s3" {
-        bucket         = "${module.state_bucket.s3_bucket_id}"
-        key            = "<stack-name>/terraform.tfstate"
-        region         = "${var.aws_region}"
-        dynamodb_table = "${module.state_lock.dynamodb_table_id}"
-        encrypt        = true
+        bucket       = "${module.state_bucket.s3_bucket_id}"
+        key          = "<stack-name>/terraform.tfstate"
+        region       = "${var.aws_region}"
+        use_lockfile = true
+        encrypt      = true
       }
     }
   EOT

@@ -1,9 +1,8 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  name_prefix           = "${var.env}-${var.system_name}"
-  state_bucket_name     = "${local.name_prefix}-tfstate-${data.aws_caller_identity.current.account_id}"
-  state_lock_table_name = "${local.name_prefix}-tfstate-lock"
+  name_prefix       = "${var.env}-${var.system_name}"
+  state_bucket_name = "${local.name_prefix}-tfstate-${data.aws_caller_identity.current.account_id}"
 }
 
 module "state_bucket" {
@@ -58,22 +57,3 @@ module "state_bucket" {
   ]
 }
 
-module "state_lock" {
-  source  = "terraform-aws-modules/dynamodb-table/aws"
-  version = "~> 5.5"
-
-  name         = local.state_lock_table_name
-  hash_key     = "LockID"
-  billing_mode = "PAY_PER_REQUEST"
-
-  attributes = [
-    {
-      name = "LockID"
-      type = "S"
-    },
-  ]
-
-  server_side_encryption_enabled = true
-  point_in_time_recovery_enabled = true
-  deletion_protection_enabled    = true
-}
