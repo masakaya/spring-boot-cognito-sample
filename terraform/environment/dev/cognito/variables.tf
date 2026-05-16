@@ -35,7 +35,7 @@ variable "route53_zone_id" {
 variable "callback_urls" {
   description = "OAuth redirect URIs allowed by the user pool client."
   type        = list(string)
-  default     = ["http://localhost:3000/callback/auth"]
+  default     = ["http://localhost:3000/api/auth/callback/cognito"]
 }
 
 variable "logout_urls" {

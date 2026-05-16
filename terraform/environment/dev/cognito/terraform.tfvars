@@ -7,7 +7,7 @@ aws_region   = "ap-northeast-1"
 custom_domain   = "auth.dev.example.com"
 route53_zone_id = "ZXXXXXXXXXXXXX"
 
-callback_urls = ["http://localhost:3000/callback/auth"]
+callback_urls = ["http://localhost:3000/api/auth/callback/cognito"]
 logout_urls   = ["http://localhost:3000/"]
 
 token_validity = {
