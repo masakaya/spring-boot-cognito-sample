@@ -4,7 +4,6 @@ resource "aws_cognito_user_pool_client" "this" {
 
   generate_secret               = true
   prevent_user_existence_errors = "ENABLED"
-  enable_token_revocation       = true
 
   explicit_auth_flows = [
     "ALLOW_USER_SRP_AUTH",

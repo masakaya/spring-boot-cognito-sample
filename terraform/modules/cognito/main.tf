@@ -7,7 +7,6 @@ resource "aws_cognito_user_pool" "this" {
 
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
-  mfa_configuration        = "OFF"
 
   password_policy {
     minimum_length    = var.password_policy.min_length
@@ -29,11 +28,10 @@ resource "aws_cognito_user_pool" "this" {
   }
 
   schema {
-    name                     = "email"
-    attribute_data_type      = "String"
-    required                 = true
-    mutable                  = true
-    developer_only_attribute = false
+    name                = "email"
+    attribute_data_type = "String"
+    required            = true
+    mutable             = true
 
     string_attribute_constraints {
       min_length = 1
