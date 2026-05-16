@@ -1,0 +1,70 @@
+# tfsec: scan terraform/ and report findings to GitHub Code Scanning + Datadog.
+#
+# Required secrets / variables (repo or org level):
+#   secrets.DD_API_KEY  - Datadog API key. If unset, the Datadog upload step is skipped.
+#   vars.DD_SITE        - Datadog site (e.g. datadoghq.com, datadoghq.eu, us3.datadoghq.com).
+#                         Defaults to datadoghq.com.
+
+name: tfsec
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/tfsec.yml"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/tfsec.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+  tfsec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform
+          additional_args: >-
+            --soft-fail
+            --format sarif
+            --out ${{ github.workspace }}/tfsec.sarif
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: tfsec.sarif
+          category: tfsec
+
+      - name: Detect Datadog credentials
+        if: always()
+        id: dd
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+        run: |
+          if [ -n "${DD_API_KEY}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DD_API_KEY is not set; skipping Datadog upload."
+          fi
+
+      - name: Upload SARIF to Datadog
+        if: always() && steps.dd.outputs.configured == 'true'
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_SITE: ${{ vars.DD_SITE || 'datadoghq.com' }}
+        run: |
+          npx --yes @datadog/datadog-ci@^2 sarif upload \
+            --service spring-boot-cognito-sample \
+            --env ${{ github.ref == 'refs/heads/main' && 'prod' || 'ci' }} \
+            tfsec.sarif
