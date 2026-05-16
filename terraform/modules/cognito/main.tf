@@ -24,7 +24,9 @@ resource "aws_cognito_user_pool" "this" {
   }
 
   email_configuration {
-    email_sending_account = "COGNITO_DEFAULT"
+    email_sending_account = "DEVELOPER"
+    source_arn            = aws_sesv2_email_identity.this.arn
+    from_email_address    = local.sender_email
   }
 
   schema {

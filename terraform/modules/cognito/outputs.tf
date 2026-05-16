@@ -63,3 +63,18 @@ output "cognito_domain_cloudfront_distribution" {
   description = "CloudFront distribution domain that backs the Cognito custom domain. Use as the alias target if you manage DNS outside this stack."
   value       = aws_cognito_user_pool_domain.this.cloudfront_distribution
 }
+
+output "ses_email_identity_arn" {
+  description = "ARN of the SES email identity used by Cognito to deliver verification / reset / MFA emails."
+  value       = aws_sesv2_email_identity.this.arn
+}
+
+output "ses_email_identity_domain" {
+  description = "Domain registered as the SES email identity (derived from custom_domain)."
+  value       = aws_sesv2_email_identity.this.email_identity
+}
+
+output "ses_from_email_address" {
+  description = "From address Cognito uses when sending emails through SES."
+  value       = local.sender_email
+}

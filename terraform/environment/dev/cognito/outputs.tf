@@ -58,3 +58,18 @@ output "cognito_domain_cloudfront_distribution" {
   description = "CloudFront distribution backing the Cognito custom domain."
   value       = module.cognito.cognito_domain_cloudfront_distribution
 }
+
+output "ses_email_identity_arn" {
+  description = "SES email identity ARN used by Cognito."
+  value       = module.cognito.ses_email_identity_arn
+}
+
+output "ses_email_identity_domain" {
+  description = "Domain registered as the SES email identity."
+  value       = module.cognito.ses_email_identity_domain
+}
+
+output "ses_from_email_address" {
+  description = "From address Cognito uses for emails (SES sender)."
+  value       = module.cognito.ses_from_email_address
+}

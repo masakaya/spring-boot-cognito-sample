@@ -32,6 +32,12 @@ variable "route53_zone_id" {
   type        = string
 }
 
+variable "ses_sender_local_part" {
+  description = "Local part of the SES sender address (e.g. \"noreply\" -> noreply@<parent of custom_domain>)."
+  type        = string
+  default     = "noreply"
+}
+
 variable "callback_urls" {
   description = "OAuth redirect URIs allowed by the user pool client."
   type        = list(string)

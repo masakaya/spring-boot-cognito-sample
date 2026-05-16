@@ -19,8 +19,14 @@ variable "custom_domain" {
 }
 
 variable "route53_zone_id" {
-  description = "Route53 hosted zone ID that owns the parent of custom_domain. Used for ACM DNS validation and alias record."
+  description = "Route53 hosted zone ID that owns the parent of custom_domain. Used for ACM DNS validation, Hosted UI alias, and SES DKIM CNAME records."
   type        = string
+}
+
+variable "ses_sender_local_part" {
+  description = "Local part of the SES verified sender address. Combined with the parent of custom_domain to form the from address (e.g. \"noreply\" + \"dev.example.com\" -> noreply@dev.example.com)."
+  type        = string
+  default     = "noreply"
 }
 
 variable "callback_urls" {
