@@ -27,7 +27,6 @@ replay_pid*
 **/.terraform/
 *.tfstate
 *.tfstate.*
-**/terraform.tfstate.d/
 *.auto.tfvars
 crash.log
 crash.*.log

@@ -1,31 +1,44 @@
 # Terraform Bootstrap (tfstate Backend)
 
-このスタックは、ほかの Terraform スタックが利用する **共有 state バックエンド** (S3 + DynamoDB) を AWS 上に作成する。`dev` / `stg` / `prd` の 3 環境ぶんを **同じコードを使い分けて** 作成する。
+このスタックは、ほかの Terraform スタックが利用する **共有 state バックエンド** (S3 + DynamoDB) を AWS 上に作成する。`dev` / `stg` / `prd` の環境別および、環境横断のリソース (例: `domain/dns`, `domain/acm`) 用の `shared` を、同じコードを使い分けて作成する。
 
 ## 作成リソース
 
-リソース名は `${system_name}-${environment}` をプレフィックスとして付与する。
+リソース名は `${env}-${system_name}` をプレフィックスとして付与する (例: `dev-sbcs`)。
 
 | リソース | 役割 |
 | --- | --- |
-| S3 バケット `<system>-<env>-tfstate-<account-id>` | tfstate の保管。バージョニング・SSE-S3・Public Access Block・HTTPS/TLS 強制を有効化 |
-| DynamoDB テーブル `<system>-<env>-tfstate-lock` | state の排他ロック (`LockID` ハッシュキー、PAY_PER_REQUEST、PITR、削除保護) |
+| S3 バケット `<env>-<system>-tfstate-<account-id>` | tfstate の保管。バージョニング・SSE-S3・Public Access Block・HTTPS/TLS 強制を有効化 |
+| DynamoDB テーブル `<env>-<system>-tfstate-lock` | state の排他ロック (`LockID` ハッシュキー、PAY_PER_REQUEST、PITR、削除保護) |
 
-利用モジュール:
+## 前提
 
-- [`terraform-aws-modules/s3-bucket/aws`](https://registry.terraform.io/modules/terraform-aws-modules/s3-bucket/aws) `~> 5.13`
-- [`terraform-aws-modules/dynamodb-table/aws`](https://registry.terraform.io/modules/terraform-aws-modules/dynamodb-table/aws) `~> 5.5`
+- Terraform `>= 1.15.0`
+- AWS Provider `~> 6.0`
+- 利用モジュール:
+  - [`terraform-aws-modules/s3-bucket/aws`](https://registry.terraform.io/modules/terraform-aws-modules/s3-bucket/aws) `~> 5.13`
+  - [`terraform-aws-modules/dynamodb-table/aws`](https://registry.terraform.io/modules/terraform-aws-modules/dynamodb-table/aws) `~> 5.5`
 
 ## ファイル構成
 
 ```
 terraform/bootstrap/
-├── versions.tf     providers.tf   variables.tf
-├── main.tf         outputs.tf     README.md
+├── versions.tf   providers.tf   variables.tf
+├── main.tf       outputs.tf     README.md
 ├── envs/
-│   ├── dev.tfvars  stg.tfvars     prd.tfvars
-└── state/                          # -state=state/<env>.tfstate の格納先 (.gitkeep のみ commit)
+│   └── dev.tfvars  stg.tfvars  prd.tfvars  shared.tfvars
+└── state/                       # -state=state/<env>.tfstate の格納先 (.gitkeep のみ commit)
 ```
+
+## 変数
+
+| 変数 | 用途 | 例 |
+| --- | --- | --- |
+| `env` | リソース名の先頭セグメント。`dev` / `stg` / `prd` / `shared` のいずれか (`shared` は環境横断スタック用) | `dev` |
+| `system_name` | リソース名の 2 セグメント目に入る短い識別子 (S3 バケット名の 63 文字制限を考慮した短縮形) | `sbcs` |
+| `project_name` | `default_tags` の `Project` に使う長い名前 | `spring-boot-cognito-sample` |
+| `aws_region` | バックエンドリソースを作る AWS リージョン | `ap-northeast-1` |
+| `tags` | `default_tags` に追加マージするタグ (任意) | `{}` |
 
 ## 初回 apply (環境ごと)
 
@@ -46,27 +59,29 @@ terraform apply -var-file=envs/stg.tfvars -state=state/stg.tfstate
 # prd
 terraform plan  -var-file=envs/prd.tfvars -state=state/prd.tfstate
 terraform apply -var-file=envs/prd.tfvars -state=state/prd.tfstate
+
+# shared (環境横断スタック用: domain/dns, domain/acm など)
+terraform plan  -var-file=envs/shared.tfvars -state=state/shared.tfstate
+terraform apply -var-file=envs/shared.tfvars -state=state/shared.tfstate
 ```
 
 > **注意**: `-var-file` と `-state` の環境名は必ず揃えること (取り違えると別環境のリソースを上書きしてしまう)。
 
-apply 後、output を見たい場合も `-state` を明示:
+apply 後、output を見たい場合も `-state` を明示する。`backend_config_snippet` がそのままほかのスタックに貼り付け可能:
 
 ```bash
 terraform output -state=state/dev.tfstate backend_config_snippet
 ```
-
-apply 後、`terraform output backend_config_snippet` でほかのスタックに貼り付ける `backend "s3"` ブロックが取得できる。
 
 ## ほかのスタックでの利用例
 
 ```hcl
 terraform {
   backend "s3" {
-    bucket         = "spring-boot-cognito-sample-dev-tfstate-123456789012"
+    bucket         = "dev-sbcs-tfstate-123456789012"
     key            = "app/terraform.tfstate"
     region         = "ap-northeast-1"
-    dynamodb_table = "spring-boot-cognito-sample-dev-tfstate-lock"
+    dynamodb_table = "dev-sbcs-tfstate-lock"
     encrypt        = true
   }
 }
