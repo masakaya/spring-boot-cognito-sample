@@ -1,0 +1,12 @@
+# terraform.tfvars.sample
+#
+# 1. Copy to terraform.tfvars (which is gitignored).
+# 2. Fill in placeholder values (empty strings, etc.).
+# 3. See variables.tf for the description of each variable.
+# 4. Regenerate this sample whenever variables.tf changes:
+#      mise x -- terraform-docs tfvars hcl . > terraform.tfvars.sample
+
+aws_region   = "ap-northeast-1"
+project_name = "spring-boot-cognito-sample"
+system_name  = "sbcs"
+tags         = {}
