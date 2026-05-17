@@ -41,11 +41,23 @@ jobs:
       - name: Sanitize tfsec SARIF URIs
         if: always() && hashFiles('tfsec.sarif') != ''
         run: |
-          # tfsec emits "git://..." URIs in SARIF originalUriBaseIds when
-          # scanning a git repo, which GitHub Code Scanning rejects with
+          # tfsec emits URIs whose scheme is "git" in SARIF (e.g. originalUriBaseIds
+          # for a git-managed workspace). GitHub Code Scanning rejects them with
           # "SARIF URI scheme 'git' did not match the checkout URI scheme 'file'".
-          # Rewrite them to file:// pointing at the runner workspace.
-          sed -i 's|"uri": "git://[^"]*"|"uri": "file:///github/workspace/"|g' tfsec.sarif
+          # Walk the SARIF tree and replace any object whose `uri` starts with
+          # "git" with a file:// URI pointing at the runner workspace.
+          echo "--- git: URIs found ---"
+          grep -oE '"uri": *"git[^"]*"' tfsec.sarif || echo "(none matched literally)"
+          jq 'walk(
+                if type == "object"
+                   and (.uri? // "" | type == "string")
+                   and (.uri | test("^git[:+]"))
+                then .uri = "file:///github/workspace/"
+                else . end
+              )' tfsec.sarif > tfsec.sanitized.sarif
+          mv tfsec.sanitized.sarif tfsec.sarif
+          echo "--- git: URIs after sanitize ---"
+          grep -oE '"uri": *"git[^"]*"' tfsec.sarif || echo "(none — clean)"
 
       - name: Upload SARIF to GitHub Code Scanning
         if: always()
