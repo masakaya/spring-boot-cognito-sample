@@ -38,6 +38,15 @@ jobs:
             --format sarif
             --out tfsec.sarif
 
+      - name: Sanitize tfsec SARIF URIs
+        if: always() && hashFiles('tfsec.sarif') != ''
+        run: |
+          # tfsec emits "git://..." URIs in SARIF originalUriBaseIds when
+          # scanning a git repo, which GitHub Code Scanning rejects with
+          # "SARIF URI scheme 'git' did not match the checkout URI scheme 'file'".
+          # Rewrite them to file:// pointing at the runner workspace.
+          sed -i 's|"uri": "git://[^"]*"|"uri": "file:///github/workspace/"|g' tfsec.sarif
+
       - name: Upload SARIF to GitHub Code Scanning
         if: always()
         uses: github/codeql-action/upload-sarif@v3
