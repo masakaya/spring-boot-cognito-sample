@@ -1,5 +1,5 @@
 module "cognito" {
-  source = "../../../modules/cognito"
+  source = "../../modules/cognito"
 
   providers = {
     aws           = aws

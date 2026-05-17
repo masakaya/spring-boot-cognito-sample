@@ -5,7 +5,7 @@ locals {
       System    = var.system_name
       Env       = var.env
       ManagedBy = "Terraform"
-      Stack     = "cognito"
+      Stack     = "environment-dev"
     },
     var.tags,
   )

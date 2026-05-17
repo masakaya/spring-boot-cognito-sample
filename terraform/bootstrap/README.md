@@ -25,52 +25,87 @@ state lock は Terraform 1.10 で導入され 1.11 で GA となった **S3 nati
 terraform/bootstrap/
 ├── versions.tf   providers.tf   variables.tf
 ├── main.tf       outputs.tf     README.md
-├── envs/
-│   └── dev.tfvars  stg.tfvars  prd.tfvars  shared.tfvars
-└── state/                       # -state=state/<env>.tfstate の格納先 (.gitkeep のみ commit)
+├── backend.tf    backend.hcl              # 初回 apply 後の S3 移行用
+└── state/                                  # 初回 apply 専用 (.gitkeep のみ commit)
 ```
 
 ## 変数
 
-| 変数 | 用途 | 例 |
+`env` のみ環境ごとに変える。残りは `variables.tf` のデフォルト値で運用するため、tfvars ファイルは置かない。必要があれば `-var=<name>=<value>` で個別に上書きする。
+
+| 変数 | 用途 | デフォルト |
 | --- | --- | --- |
-| `env` | リソース名の先頭セグメント。`dev` / `stg` / `prd` / `shared` のいずれか (`shared` は環境横断スタック用) | `dev` |
+| `env` | リソース名の先頭セグメント。`dev` / `stg` / `prd` / `shared` のいずれか (`shared` は環境横断スタック用) | — (必須) |
 | `system_name` | リソース名の 2 セグメント目に入る短い識別子 (S3 バケット名の 63 文字制限を考慮した短縮形) | `sbcs` |
 | `project_name` | `default_tags` の `Project` に使う長い名前 | `spring-boot-cognito-sample` |
 | `aws_region` | バックエンドリソースを作る AWS リージョン | `ap-northeast-1` |
 | `tags` | `default_tags` に追加マージするタグ (任意) | `{}` |
 
-## 初回 apply (環境ごと)
+## 運用フロー
 
-ローカル state は **`-state` フラグで環境ごとに別ファイル** に分離する (`state/<env>.tfstate`)。`terraform workspace` は使わない。
+bootstrap は **「初回はローカル state でバケットを作る → 作ったバケットへ state を移行する → 以降は S3 backend で運用」** の 2 フェーズで進める。
+
+### Phase 1 — 初回 apply (ローカル state)
+
+`backend.tf` があると S3 backend として init されてしまうので、最初の `terraform init` は `-backend=false` で抑止する。
 
 ```bash
 cd terraform/bootstrap
-terraform init
+rm -rf .terraform
+terraform init -backend=false
 
 # dev
-terraform plan  -var-file=envs/dev.tfvars -state=state/dev.tfstate
-terraform apply -var-file=envs/dev.tfvars -state=state/dev.tfstate
+terraform apply -var=env=dev    -state=state/dev.tfstate
 
-# stg
-terraform plan  -var-file=envs/stg.tfvars -state=state/stg.tfstate
-terraform apply -var-file=envs/stg.tfvars -state=state/stg.tfstate
-
-# prd
-terraform plan  -var-file=envs/prd.tfvars -state=state/prd.tfstate
-terraform apply -var-file=envs/prd.tfvars -state=state/prd.tfstate
-
-# shared (環境横断スタック用: domain/dns, domain/acm など)
-terraform plan  -var-file=envs/shared.tfvars -state=state/shared.tfstate
-terraform apply -var-file=envs/shared.tfvars -state=state/shared.tfstate
+# stg / prd / shared も同様
+terraform apply -var=env=stg    -state=state/stg.tfstate
+terraform apply -var=env=prd    -state=state/prd.tfstate
+terraform apply -var=env=shared -state=state/shared.tfstate
 ```
 
-> **注意**: `-var-file` と `-state` の環境名は必ず揃えること (取り違えると別環境のリソースを上書きしてしまう)。
+> **注意**: `-var=env=...` と `-state=state/<env>.tfstate` の env は必ず揃えること。
 
-apply 後、output を見たい場合も `-state` を明示する。`backend_config_snippet` がそのままほかのスタックに貼り付け可能:
+### Phase 2 — state を S3 へ migrate
+
+Phase 1 で作ったバケットに、bootstrap 自身の state を移行する。env ごとに 1 回ずつ実施:
 
 ```bash
-terraform output -state=state/dev.tfstate backend_config_snippet
+# dev
+rm -rf .terraform
+terraform init -migrate-state \
+  -backend-config=../backends/dev.hcl \
+  -backend-config=backend.hcl \
+  -state=state/dev.tfstate
+# プロンプトに yes と回答 → state が s3://dev-sbcs-tfstate-<account>/bootstrap/terraform.tfstate へ移動
+# state/dev.tfstate と state/dev.tfstate.backup はもう不要 (削除して構わない)
+
+# shared
+rm -rf .terraform
+terraform init -migrate-state \
+  -backend-config=../backends/shared.hcl \
+  -backend-config=backend.hcl \
+  -state=state/shared.tfstate
+# (stg / prd も同様、対応する backends/<env>.hcl があれば)
+```
+
+### 以降の通常運用
+
+env を切り替えるたびに backend 設定が変わるので、`rm -rf .terraform` (または `terraform init -reconfigure`) を挟む。
+
+```bash
+cd terraform/bootstrap
+rm -rf .terraform
+terraform init \
+  -backend-config=../backends/dev.hcl \
+  -backend-config=backend.hcl
+terraform plan  -var=env=dev
+terraform apply -var=env=dev
+```
+
+apply 後の output:
+
+```bash
+terraform output backend_config_snippet   # ほかのスタックに貼り付け可
 ```
 
 ## ほかのスタックでの利用例
@@ -94,29 +129,27 @@ terraform init \
   -backend-config=../../backends/shared.hcl \
   -backend-config=backend.hcl
 
-# environment/dev/* (env=dev スコープ)
-cd terraform/environment/dev/cognito
+# environment/dev (env=dev スコープ)
+cd terraform/environment/dev
 terraform init \
-  -backend-config=../../../backends/dev.hcl \
+  -backend-config=../../backends/dev.hcl \
   -backend-config=backend.hcl
 ```
 
 複数指定された `-backend-config` は Terraform 内部でマージされる。`<ACCOUNT_ID>` プレースホルダは利用時に置換すること。
 
-## なぜ bootstrap の state はローカル管理なのか
+## なぜ 2 フェーズ構成なのか
 
-「state を保存する S3 バケットを作る Terraform」が、その S3 バケットを backend にしようとすると鶏卵問題になる。そのため bootstrap だけは **ローカル state** で運用し、`state/*.tfstate` は Git に含めない (`.gitignore` で除外済み)。
+「state を保存する S3 バケットを作る Terraform」自身の state を、その S3 バケットへ最初から書き込むことはできない (鶏卵問題)。そこで:
 
-どうしてもリモート化したい場合は、apply 完了後に同ディレクトリへ `backend "s3"` ブロックを追加し:
+1. **初回だけ** ローカル state でバケットを作る (`-backend=false` + `-state=state/<env>.tfstate`)
+2. バケットが出来た直後に `terraform init -migrate-state` で **そのバケットへ state を移行**
+3. 以降は他スタックと同じく S3 backend + `use_lockfile` で運用
 
-```bash
-terraform init -migrate-state
-```
-
-で移行できる。
+これにより bootstrap state も S3 versioning とロックで保護され、複数人開発でも安全。`state/*.tfstate` は `.gitignore` 済みで、移行後は実体ファイルも不要 (`state/` ディレクトリは新環境追加時の Phase 1 のために残す)。
 
 ## 注意
 
 - `force_destroy = false` を設定しているため、中身が空でない限り `terraform destroy` ではバケットは削除されない。意図的に削除する場合は引数を一時的に変更してから実施する。
 - `.terraform.lock.hcl` は Git にコミットすること (依存プロバイダーバージョンの再現性確保のため)。
-- 既に DynamoDB ロックで `terraform init` 済みのスタックがある場合は、backend 設定変更後に `terraform init -reconfigure` (state は移行不要) を実行してロック方式を切り替えること。
+- env を切り替えるときは必ず `rm -rf .terraform` (または `terraform init -reconfigure -backend-config=...`) を挟む。`.terraform/` には直前 env の backend 設定がキャッシュされているため、これを忘れると別 env の state を更新してしまう。
