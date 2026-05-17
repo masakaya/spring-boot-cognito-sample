@@ -1,0 +1,36 @@
+# terraform.tfvars.sample
+#
+# 1. Copy to terraform.tfvars (which is gitignored).
+# 2. Fill in placeholder values (empty strings, etc.).
+# 3. See variables.tf for the description of each variable.
+# 4. Regenerate this sample whenever variables.tf changes:
+#      mise x -- terraform-docs tfvars hcl . > terraform.tfvars.sample
+
+aws_region = "ap-northeast-1"
+callback_urls = [
+  "http://localhost:3000/api/auth/callback/cognito"
+]
+custom_domain = ""
+env           = "dev"
+logout_urls = [
+  "http://localhost:3000/"
+]
+project_name          = "spring-boot-cognito-sample"
+route53_zone_id       = ""
+ses_sender_local_part = "noreply"
+system_name           = "sbcs"
+tags                  = {}
+token_validity = {
+  "access": {
+    "unit": "minutes",
+    "value": 60
+  },
+  "id": {
+    "unit": "minutes",
+    "value": 60
+  },
+  "refresh": {
+    "unit": "days",
+    "value": 30
+  }
+}

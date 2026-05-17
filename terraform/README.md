@@ -105,7 +105,38 @@ terraform apply
 | `*.auto.tfvars` | 無視 |
 | `bootstrap/terraform.tfstate` | 無視 (bootstrap はローカル state)。紛失したら import で復旧 |
 | `.terraform.lock.hcl` | **コミット** (依存プロバイダーバージョンの再現性確保) |
-| `*.tfvars` (`backend.hcl` 以外) | プロジェクト都合で判断 (秘匿値があれば無視、それ以外はコミット) |
+| `terraform.tfvars` | 無視 (各 dev の実値)。テンプレートとして `terraform.tfvars.sample` を **コミット** |
+| `backend.hcl` | **コミット** (機微情報を含まない backend 設定。`<ACCOUNT_ID>` のような placeholder で運用) |
+
+## tfvars の運用
+
+各スタックには **`terraform.tfvars.sample`** が commit されている。これは `variables.tf` から `terraform-docs tfvars hcl` で自動生成したテンプレートで、初回 / 新規メンバーは以下の流れで使う:
+
+```bash
+cd terraform/<stack>
+cp terraform.tfvars.sample terraform.tfvars   # 実体は gitignore 済み
+$EDITOR terraform.tfvars                       # 空文字や placeholder を実値に
+terraform plan
+terraform apply
+```
+
+実体の `terraform.tfvars` は **`.gitignore` で除外** (各環境固有の値・秘匿値が混じり得るため)。サンプル側だけが Git に乗る。
+
+`variables.tf` を変更したらサンプルも再生成して commit する:
+
+```bash
+for d in terraform/bootstrap terraform/domain/dns terraform/domain/acm terraform/environment/dev; do
+  {
+    echo "# terraform.tfvars.sample"
+    echo "# 1. Copy to terraform.tfvars (gitignored)."
+    echo "# 2. Fill in placeholder values."
+    echo "# 3. See variables.tf for descriptions."
+    echo "# 4. Regenerate: mise x -- terraform-docs tfvars hcl . > terraform.tfvars.sample"
+    echo
+    mise x -- terraform-docs tfvars hcl "$d"
+  } > "$d/terraform.tfvars.sample"
+done
+```
 
 ## モジュール ドキュメントの再生成
 

@@ -28,5 +28,7 @@ replay_pid*
 *.tfstate
 *.tfstate.*
 *.auto.tfvars
+# Actual per-dev values; we commit terraform.tfvars.sample instead.
+terraform.tfvars
 crash.log
 crash.*.log
