@@ -36,7 +36,7 @@ jobs:
           additional_args: >-
             --soft-fail
             --format sarif
-            --out ${{ github.workspace }}/tfsec.sarif
+            --out tfsec.sarif
 
       - name: Upload SARIF to GitHub Code Scanning
         if: always()
