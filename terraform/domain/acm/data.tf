@@ -1,8 +1,7 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  subject_alternative_names = ["*.${var.domain_name}"]
-  tfstate_bucket            = "shared-${var.system_name}-tfstate-${data.aws_caller_identity.current.account_id}"
+  tfstate_bucket = "shared-${var.system_name}-tfstate-${data.aws_caller_identity.current.account_id}"
 }
 
 data "terraform_remote_state" "dns" {
@@ -18,5 +17,7 @@ data "terraform_remote_state" "dns" {
 }
 
 locals {
-  zone_id = data.terraform_remote_state.dns.outputs.zone_id
+  zone_id                   = data.terraform_remote_state.dns.outputs.zone_id
+  domain_name               = trimsuffix(data.terraform_remote_state.dns.outputs.zone_name, ".")
+  subject_alternative_names = ["*.${local.domain_name}"]
 }

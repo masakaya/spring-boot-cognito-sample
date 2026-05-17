@@ -16,21 +16,6 @@ variable "aws_region" {
   default     = "ap-northeast-1"
 }
 
-variable "domain_name" {
-  description = "Apex domain name (FQDN, e.g. example.com). Wildcard SAN '*.<domain_name>' is added automatically."
-  type        = string
-
-  validation {
-    condition = (
-      length(var.domain_name) > 0
-      && !endswith(var.domain_name, ".")
-      && !startswith(var.domain_name, "*.")
-      && can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.domain_name))
-    )
-    error_message = "domain_name must be a lowercase FQDN with at least two labels, no trailing dot, and no wildcard prefix."
-  }
-}
-
 variable "tags" {
   description = "Additional tags merged into default_tags."
   type        = map(string)
