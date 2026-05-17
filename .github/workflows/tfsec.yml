@@ -35,29 +35,24 @@ jobs:
           working_directory: terraform
           additional_args: >-
             --soft-fail
+            --exclude-downloaded-modules
             --format sarif
             --out tfsec.sarif
 
       - name: Sanitize tfsec SARIF URIs
         if: always() && hashFiles('tfsec.sarif') != ''
         run: |
-          # tfsec emits URIs whose scheme is "git" in SARIF (e.g. originalUriBaseIds
-          # for a git-managed workspace). GitHub Code Scanning rejects them with
-          # "SARIF URI scheme 'git' did not match the checkout URI scheme 'file'".
-          # Walk the SARIF tree and replace any object whose `uri` starts with
-          # "git" with a file:// URI pointing at the runner workspace.
-          echo "--- git: URIs found ---"
-          grep -oE '"uri": *"git[^"]*"' tfsec.sarif || echo "(none matched literally)"
+          # Defense in depth: even with --exclude-downloaded-modules tfsec can
+          # emit URIs with scheme "git" (e.g. originalUriBaseIds). Rewrite any
+          # remaining ones to file:// so GitHub Code Scanning accepts the SARIF.
           jq 'walk(
-                if type == "object"
-                   and (.uri? // "" | type == "string")
-                   and (.uri | test("^git[:+]"))
-                then .uri = "file:///github/workspace/"
+                if type == "object" then
+                  if (.uri // null) | type == "string" then
+                    if .uri | test("^git[:+]") then .uri = "file:///github/workspace/" else . end
+                  else . end
                 else . end
               )' tfsec.sarif > tfsec.sanitized.sarif
           mv tfsec.sanitized.sarif tfsec.sarif
-          echo "--- git: URIs after sanitize ---"
-          grep -oE '"uri": *"git[^"]*"' tfsec.sarif || echo "(none — clean)"
 
       - name: Upload SARIF to GitHub Code Scanning
         if: always()
