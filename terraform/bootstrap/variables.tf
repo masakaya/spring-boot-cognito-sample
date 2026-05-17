@@ -1,11 +1,17 @@
-variable "env" {
-  description = "Environment identifier used as the leading segment of resource names (e.g. <env>-<system>-tfstate-<account>). Pass 'shared' for env-cross stacks (domain/*)."
-  type        = string
+variable "envs" {
+  description = "List of environment identifiers to create tfstate buckets for. Each entry produces an S3 bucket named '<env>-<system_name>-tfstate-<account_id>'. Use 'shared' for env-cross stacks (domain/*)."
+  type        = list(string)
+  default     = ["dev", "shared"]
   nullable    = false
 
   validation {
-    condition     = contains(["dev", "stg", "prd", "shared"], var.env)
-    error_message = "env must be one of: dev, stg, prd, shared."
+    condition     = alltrue([for e in var.envs : contains(["dev", "stg", "prd", "shared"], e)])
+    error_message = "envs may only contain: dev, stg, prd, shared."
+  }
+
+  validation {
+    condition     = length(var.envs) == length(distinct(var.envs))
+    error_message = "envs must not contain duplicates."
   }
 }
 
@@ -29,7 +35,7 @@ variable "project_name" {
 }
 
 variable "aws_region" {
-  description = "AWS region in which the tfstate bucket is created. Must match the region used in terraform/backends/<env>.hcl."
+  description = "AWS region in which the tfstate buckets are created. Must match the region used in terraform/backends/<env>.hcl."
   type        = string
   default     = "ap-northeast-1"
   nullable    = false

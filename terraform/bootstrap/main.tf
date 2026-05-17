@@ -1,15 +1,12 @@
 data "aws_caller_identity" "current" {}
 
-locals {
-  name_prefix       = "${var.env}-${var.system_name}"
-  state_bucket_name = "${local.name_prefix}-tfstate-${data.aws_caller_identity.current.account_id}"
-}
-
 module "state_bucket" {
+  for_each = toset(var.envs)
+
   source  = "terraform-aws-modules/s3-bucket/aws"
   version = "~> 5.13"
 
-  bucket        = local.state_bucket_name
+  bucket        = "${each.key}-${var.system_name}-tfstate-${data.aws_caller_identity.current.account_id}"
   force_destroy = false
 
   control_object_ownership = true
@@ -55,5 +52,8 @@ module "state_bucket" {
       abort_incomplete_multipart_upload_days = 7
     },
   ]
-}
 
+  tags = {
+    Env = each.key
+  }
+}

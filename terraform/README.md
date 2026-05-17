@@ -42,19 +42,15 @@ aws sts get-caller-identity   # 想定したアカウント / ロールである
 ## スタック適用順序
 
 ```
-bootstrap (env=shared) ─┐
-                        ├─→ domain/dns ─→ domain/acm ─┐
-bootstrap (env=dev)  ───┘                             ├─→ environment/dev
-                                                      ┘
+bootstrap (envs=[dev,shared,...]) ─→ domain/dns ─→ domain/acm ─→ environment/dev
 ```
 
 | 順 | スタック | 内容 | 依存 |
 | --- | --- | --- | --- |
-| 1 | `bootstrap` (env=shared) | `shared-sbcs-tfstate-<account>` バケット作成 | なし |
-| 2 | `bootstrap` (env=dev) | `dev-sbcs-tfstate-<account>` バケット作成 | なし (shared と独立) |
-| 3 | `domain/dns` | Route53 public hosted zone | shared バケット |
-| 4 | `domain/acm` | ACM 証明書 (us-east-1) | `domain/dns` の outputs (`zone_id`) |
-| 5 | `environment/dev` | Cognito User Pool + 周辺 (`modules/cognito`) | `domain/dns`, `domain/acm` の outputs (tfvars 経由で手動転記) |
+| 1 | `bootstrap` | `var.envs` に挙げた env ごとに `<env>-sbcs-tfstate-<account>` バケットを作成 (1 回の apply で全 env 分) | なし (ローカル state) |
+| 2 | `domain/dns` | Route53 public hosted zone | shared バケット |
+| 3 | `domain/acm` | ACM 証明書 (us-east-1) | `domain/dns` の outputs (`zone_id`) |
+| 4 | `environment/dev` | Cognito User Pool + 周辺 (`modules/cognito`) | `domain/dns`, `domain/acm` の outputs (tfvars 経由で手動転記) |
 
 各スタックの詳細手順は当該ディレクトリ内のコメント / README を参照。
 
@@ -62,7 +58,13 @@ bootstrap (env=dev)  ───┘                             ├─→ environm
 
 ### bootstrap
 
-2 フェーズ (ローカル apply → S3 へ migrate)。詳細は [bootstrap/README.md](./bootstrap/README.md) を参照。
+`backend "local"` 固定、1 apply で `var.envs` の全 env 分のバケットを作成。詳細は [bootstrap/README.md](./bootstrap/README.md) を参照。
+
+```bash
+cd terraform/bootstrap
+terraform init
+terraform apply
+```
 
 ### domain/* (env-cross)
 
@@ -101,7 +103,7 @@ terraform apply
 | `.terraform/` | 無視 (init で再生成可) |
 | `*.tfstate`, `*.tfstate.*` | 無視 (機微情報を含むため) |
 | `*.auto.tfvars` | 無視 |
-| `bootstrap/state/*.tfstate` | 無視 (Phase 1 の一時ファイル) |
+| `bootstrap/terraform.tfstate` | 無視 (bootstrap はローカル state)。紛失したら import で復旧 |
 | `.terraform.lock.hcl` | **コミット** (依存プロバイダーバージョンの再現性確保) |
 | `*.tfvars` (`backend.hcl` 以外) | プロジェクト都合で判断 (秘匿値があれば無視、それ以外はコミット) |
 
@@ -118,7 +120,8 @@ mise x -- terraform-docs -c terraform/.terraform-docs.yml terraform/modules/cogn
 
 ## 新環境の追加手順 (例: stg を追加するとき)
 
-1. `terraform/backends/stg.hcl` を作成 (`backends/dev.hcl` を参考に `bucket` を `stg-sbcs-tfstate-<ACCOUNT_ID>` に)
-2. `bootstrap` を env=stg で apply → migrate (`bootstrap/README.md` の手順)
-3. `terraform/environment/stg/` を新規作成 (`environment/dev/` のファイル一式をコピーして `env` 値や `terraform.tfvars` を調整、`backend.hcl` の `key` を `environment/stg/terraform.tfstate` に)
-4. `terraform init` → `apply`
+1. `bootstrap/variables.tf` の `envs` デフォルトに `"stg"` を追加 (または `-var='envs=[...,"stg"]'` で渡す)
+2. `terraform/bootstrap` で `terraform apply` → `stg-sbcs-tfstate-<ACCOUNT_ID>` バケットが作成される
+3. `terraform/backends/stg.hcl` を作成 (`backends/dev.hcl` を参考に `bucket` を `stg-sbcs-tfstate-<ACCOUNT_ID>` に)
+4. `terraform/environment/stg/` を新規作成 (`environment/dev/` のファイル一式をコピーして `env` 値や `terraform.tfvars` を調整、`backend.hcl` の `key` を `environment/stg/terraform.tfstate` に)
+5. `terraform init` → `apply`
